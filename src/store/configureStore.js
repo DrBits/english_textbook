@@ -1,29 +1,46 @@
-import { createStore, applyMiddleware, compose } from 'redux';
+import { createStore, applyMiddleware, compose, combineReducers } from 'redux';
+import { persistStore, persistReducer } from 'redux-persist';
+import storage from 'redux-persist/lib/storage';
 
-import reducers from 'reducers';
+import rootSaga from '../sagas';
+import rootReducer from '../reducers';
 
-let middlewares = [];
+import middleware, { sagaMiddleware } from './middleware';
 
-const getEnhancer = () => {
-  let devTools = f => f;
+const reducer = persistReducer(
+  {
+    key: 'rrsb',
+    storage,
+    whitelist: ['app', 'list']
+  },
+  combineReducers({ ...rootReducer })
+);
 
-  // eslint-disable-next-line no-undef
-  if (!IS_PROD && window.devToolExtension) {
-    devTools = window.devToolExtension();
-  }
+const composeEnhancer = window.__REDUX_DEVTOOLS_EXTENSION_COMPOSE__ || compose;
 
-  return compose(
-    applyMiddleware(...middlewares),
-    devTools
+const configStore = (initialState = {}) => {
+  const store = createStore(
+    reducer,
+    initialState,
+    composeEnhancer(applyMiddleware(...middleware))
   );
-};
 
-export default initialState => {
-  const store = createStore(reducers, initialState, getEnhancer());
+  sagaMiddleware.run(rootSaga);
 
   if (module.hot) {
-    module.hot.accept(require('reducers').default);
+    module.hot.accept('../reducers', () => {
+      store.replaceReducer(require('../reducers').default);
+    });
   }
 
-  return store;
+  return {
+    persistor: persistStore(store),
+    store
+  };
 };
+
+const { store, persistor } = configStore();
+
+global.store = store;
+
+export { store, persistor };
